@@ -7,7 +7,10 @@
 
 <style>
 body{margin:0;font-family:Arial;background:#0b141a;color:#e9edef}
-header{background:#075e54;color:#fff;padding:10px;text-align:center}
+header{background:#075e54;color:#fff;padding:10px}
+header b{font-size:16px}
+#status{font-size:12px;opacity:.9}
+
 #top{padding:10px;background:#111b21}
 input,button{
   width:100%;padding:12px;margin:6px 0;
@@ -15,7 +18,10 @@ input,button{
 }
 input{background:#0b141a;color:#fff;border:1px solid #2a3942}
 button{background:#25d366;font-weight:bold}
-#chat{height:60vh;overflow:auto;padding:10px}
+
+#typing{font-size:12px;opacity:.8;margin:4px 10px}
+#chat{height:55vh;overflow:auto;padding:10px}
+
 .row{display:flex;margin:6px 0}
 .left{justify-content:flex-start}
 .right{justify-content:flex-end}
@@ -31,7 +37,7 @@ button{background:#25d366;font-weight:bold}
 
 <header>
 <b>ChatGo</b><br>
-Bright Career Public School
+<span id="status">offline</span>
 </header>
 
 <div id="top">
@@ -39,6 +45,7 @@ Bright Career Public School
 <button onclick="joinRoom()">Join / Change Room</button>
 </div>
 
+<div id="typing"></div>
 <div id="chat"></div>
 
 <input id="msg" placeholder="Type message">
@@ -46,8 +53,10 @@ Bright Career Public School
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-app.js";
-import { getDatabase, ref, push, onChildAdded }
-from "https://www.gstatic.com/firebasejs/12.7.0/firebase-database.js";
+import {
+  getDatabase, ref, push, onChildAdded,
+  set, onValue, onDisconnect
+} from "https://www.gstatic.com/firebasejs/12.7.0/firebase-database.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyAT0l83gGJipO3aQHpSypkQKeMWy5PwxRU",
@@ -62,37 +71,83 @@ const db = getDatabase(app);
 const chat = document.getElementById("chat");
 const msg = document.getElementById("msg");
 const roomInput = document.getElementById("room");
+const typingBox = document.getElementById("typing");
+const statusText = document.getElementById("status");
 
-// 🔑 Auto random username
+// 🔑 Auto random user
 const user = "User" + Math.floor(Math.random()*10000);
 
-let roomRef = null;
+let roomRef, usersRef, typingRef;
 
+// join room
 window.joinRoom = () => {
   if(!roomInput.value.trim()){
     alert("Room code likho");
     return;
   }
-  chat.innerHTML = "";
-  roomRef = ref(db, "privateRooms/" + roomInput.value.trim());
 
-  onChildAdded(roomRef, snap => {
-    const d = snap.val();
+  chat.innerHTML="";
+  typingBox.innerText="";
+  statusText.innerText="offline";
 
-    // 🔔 Notification
-    if(d.user !== user){
+  const room = roomInput.value.trim();
+
+  roomRef   = ref(db,"rooms/"+room+"/messages");
+  usersRef  = ref(db,"rooms/"+room+"/users/"+user);
+  typingRef = ref(db,"rooms/"+room+"/typing/"+user);
+
+  // online
+  set(usersRef,{state:"online",time:Date.now()});
+  onDisconnect(usersRef).set({state:"offline",time:Date.now()});
+
+  // online / last seen
+  onValue(ref(db,"rooms/"+room+"/users"), snap=>{
+    let online=false,last="";
+    snap.forEach(c=>{
+      if(c.key!==user){
+        if(c.val().state==="online") online=true;
+        else last="last seen "+new Date(c.val().time).toLocaleString();
+      }
+    });
+    statusText.innerText = online ? "online" : last || "offline";
+  });
+
+  // typing
+  onValue(ref(db,"rooms/"+room+"/typing"), snap=>{
+    let t=[];
+    snap.forEach(c=>{
+      if(c.key!==user && c.val()==="typing") t.push(c.key);
+    });
+    typingBox.innerText = t.length ? t.join(", ")+" typing..." : "";
+  });
+
+  // messages
+  onChildAdded(roomRef,snap=>{
+    const d=snap.val();
+
+    if(d.user!==user){
       new Audio("https://actions.google.com/sounds/v1/alarms/beep_short.ogg").play();
-      document.title = "New Message!";
+      document.title="New Message!";
     }
 
-    const row = document.createElement("div");
-    row.className = "row " + (d.user === user ? "right" : "left");
-    row.innerHTML = `<div class="bubble"><b>${d.user}</b><br>${d.text}</div>`;
+    const row=document.createElement("div");
+    row.className="row "+(d.user===user?"right":"left");
+    row.innerHTML=`<div class="bubble"><b>${d.user}</b><br>${d.text}</div>`;
     chat.appendChild(row);
-    chat.scrollTop = chat.scrollHeight;
+    chat.scrollTop=chat.scrollHeight;
   });
 };
 
+// typing detect
+let timer;
+msg.addEventListener("input",()=>{
+  if(!typingRef) return;
+  set(typingRef,"typing");
+  clearTimeout(timer);
+  timer=setTimeout(()=>set(typingRef,""),1200);
+});
+
+// send msg
 window.sendMsg = () => {
   if(!roomRef || !msg.value) return;
   push(roomRef,{
@@ -101,6 +156,7 @@ window.sendMsg = () => {
     time:Date.now()
   });
   msg.value="";
+  set(typingRef,"");
 };
 </script>
 
