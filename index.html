@@ -1,155 +1,106 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ChatGo – Bright Career Public School</title>
+<title>ChatGo – Private Chat</title>
 
 <style>
 body{margin:0;font-family:Arial;background:#0b141a;color:#e9edef}
-header{background:#075e54;color:#fff;padding:10px;display:flex;gap:10px;align-items:center}
-header img{width:42px;height:42px;border-radius:50%;background:#fff}
-header .title{font-size:14px;font-weight:bold}
-header .school{font-size:12px}
-header .status{font-size:11px;opacity:.9}
-
-input{width:100%;padding:12px;margin-bottom:8px;border-radius:25px;border:1px solid #2a3942;background:#0b141a;color:#fff}
-button{padding:12px;border:none;border-radius:25px;background:#25d366;font-weight:bold}
-
-#login,#chatBox{padding:15px}
-#chat{height:52vh;overflow:auto;padding:10px}
+header{background:#075e54;color:#fff;padding:10px;text-align:center}
+#top{padding:10px;background:#111b21}
+input,button{
+  width:100%;padding:12px;margin:6px 0;
+  border-radius:25px;border:none;font-size:14px
+}
+input{background:#0b141a;color:#fff;border:1px solid #2a3942}
+button{background:#25d366;font-weight:bold}
+#chat{height:60vh;overflow:auto;padding:10px}
 .row{display:flex;margin:6px 0}
 .left{justify-content:flex-start}
 .right{justify-content:flex-end}
-.bubble{max-width:75%;padding:10px;border-radius:10px;background:#202c33}
+.bubble{
+  max-width:75%;padding:10px;border-radius:10px;
+  background:#202c33;font-size:14px
+}
 .right .bubble{background:#005c4b}
-footer{display:flex;gap:8px;padding:10px;background:#111b21}
-footer input{flex:1}
-#typing{font-size:12px;opacity:.8;margin:4px 10px}
 </style>
 </head>
 
 <body>
 
 <header>
-<img src="https://ik.imagekit.io/a2wpi1kd9/imgToUrl/image-to-url_9FkUjGvCmc">
-<div class="title">
-ChatGo
-<div class="school">Bright Career Public School</div>
-<div class="status" id="statusText">offline</div>
-</div>
+<b>ChatGo</b><br>
+Bright Career Public School
 </header>
 
-<!-- LOGIN -->
-<div id="login">
-<input id="phone" placeholder="+91XXXXXXXXXX">
-<div id="recaptcha"></div>
-<button onclick="sendOTP()">Send OTP</button>
-<input id="otp" placeholder="Enter OTP">
-<button onclick="verifyOTP()">Verify & Login</button>
+<div id="top">
+<input id="room" placeholder="Enter Private Room Code">
+<button onclick="joinRoom()">Join / Change Room</button>
 </div>
 
-<!-- CHAT -->
-<div id="chatBox" style="display:none">
-<input id="room" placeholder="Private Room ID">
-<div id="typing"></div>
 <div id="chat"></div>
-<footer>
+
 <input id="msg" placeholder="Type message">
 <button onclick="sendMsg()">Send</button>
-</footer>
-</div>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-app.js";
-import { getAuth, RecaptchaVerifier, signInWithPhoneNumber } from
-"https://www.gstatic.com/firebasejs/12.7.0/firebase-auth.js";
-import { getDatabase, ref, push, onChildAdded, set, onValue, onDisconnect }
+import { getDatabase, ref, push, onChildAdded }
 from "https://www.gstatic.com/firebasejs/12.7.0/firebase-database.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyAT0l83gGJipO3aQHpSypkQKeMWy5PwxRU",
   authDomain: "chat-b6a52.firebaseapp.com",
   databaseURL: "https://chat-b6a52-default-rtdb.firebaseio.com",
-  projectId: "chat-b6a52",
-  messagingSenderId: "108909929088",
-  appId: "1:108909929088:web:fd976f913738e8d9a8fc65"
+  projectId: "chat-b6a52"
 };
 
 const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
 const db = getDatabase(app);
 
-let userPhone="", roomRef, statusRef, typingRef;
-const chat=document.getElementById("chat");
-const typingBox=document.getElementById("typing");
-const statusText=document.getElementById("statusText");
+const chat = document.getElementById("chat");
+const msg = document.getElementById("msg");
+const roomInput = document.getElementById("room");
 
-window.recaptchaVerifier = new RecaptchaVerifier(auth,"recaptcha",{size:"normal"});
-let confirmation;
+// 🔑 Auto random username
+const user = "User" + Math.floor(Math.random()*10000);
 
-window.sendOTP = ()=>{
-  signInWithPhoneNumber(auth, phone.value, window.recaptchaVerifier)
-  .then(r=>{confirmation=r; alert("OTP sent");})
-  .catch(e=>alert(e.message));
-};
+let roomRef = null;
 
-window.verifyOTP = ()=>{
-  confirmation.confirm(otp.value).then(res=>{
-    userPhone=res.user.phoneNumber;
-    document.getElementById("login").style.display="none";
-    document.getElementById("chatBox").style.display="block";
-  });
-};
+window.joinRoom = () => {
+  if(!roomInput.value.trim()){
+    alert("Room code likho");
+    return;
+  }
+  chat.innerHTML = "";
+  roomRef = ref(db, "privateRooms/" + roomInput.value.trim());
 
-room.addEventListener("change",()=>{
-  chat.innerHTML="";
-  const r=room.value.trim();
-  roomRef=ref(db,"rooms/"+r+"/messages");
-  statusRef=ref(db,"rooms/"+r+"/users/"+userPhone);
-  typingRef=ref(db,"rooms/"+r+"/typing/"+userPhone);
+  onChildAdded(roomRef, snap => {
+    const d = snap.val();
 
-  set(statusRef,{state:"online",time:Date.now()});
-  onDisconnect(statusRef).set({state:"offline",time:Date.now()});
+    // 🔔 Notification
+    if(d.user !== user){
+      new Audio("https://actions.google.com/sounds/v1/alarms/beep_short.ogg").play();
+      document.title = "New Message!";
+    }
 
-  onValue(ref(db,"rooms/"+r+"/users"),s=>{
-    let online=false,last="";
-    s.forEach(c=>{
-      if(c.key!==userPhone){
-        if(c.val().state==="online") online=true;
-        else last="last seen "+new Date(c.val().time).toLocaleString();
-      }
-    });
-    statusText.innerText=online?"online":last||"offline";
-  });
-
-  onValue(ref(db,"rooms/"+r+"/typing"),s=>{
-    let t=[];
-    s.forEach(c=>{if(c.key!==userPhone&&c.val()==="typing")t.push(c.key)});
-    typingBox.innerText=t.length?t.join(", ")+" typing...":"";
-  });
-
-  onChildAdded(roomRef,s=>{
-    const d=s.val();
-    const row=document.createElement("div");
-    row.className="row "+(d.user===userPhone?"right":"left");
-    row.innerHTML=`<div class="bubble">${d.user}<br>${d.text}</div>`;
+    const row = document.createElement("div");
+    row.className = "row " + (d.user === user ? "right" : "left");
+    row.innerHTML = `<div class="bubble"><b>${d.user}</b><br>${d.text}</div>`;
     chat.appendChild(row);
-    chat.scrollTop=chat.scrollHeight;
+    chat.scrollTop = chat.scrollHeight;
   });
-});
+};
 
-let timer;
-msg.addEventListener("input",()=>{
-  set(typingRef,"typing");
-  clearTimeout(timer);
-  timer=setTimeout(()=>set(typingRef,""),1200);
-});
-
-window.sendMsg=()=>{
-  push(roomRef,{user:userPhone,text:msg.value,time:Date.now()});
+window.sendMsg = () => {
+  if(!roomRef || !msg.value) return;
+  push(roomRef,{
+    user:user,
+    text:msg.value,
+    time:Date.now()
+  });
   msg.value="";
-  set(typingRef,"");
 };
 </script>
 
